@@ -24,66 +24,167 @@ mongoose.connect(process.env.MONGODB_URI, {
 .then(() => console.log('MongoDB Connected'))
 .catch(err => console.log(err));
 
-// Import Todo model
-const Todo = require('./models/Todo');
+// Import models
+const Product = require('./models/Product');
+const Cart = require('./models/Cart');
 
-// Routes
-// Get all todos
-app.get('/get', async (req, res) => {
+// PRODUCT ROUTES
+// Get all products
+app.get('/api/products', async (req, res) => {
     try {
-        const todos = await Todo.find();
-        res.json(todos);
+        const products = await Product.find();
+        res.json(products);
     } catch (err) {
-        res.status(5001).json({ message: err.message });
+        res.status(500).json({ message: err.message });
     }
 });
 
-// Add a todo
-app.post('/add', async (req, res) => {
+// Get product by ID
+app.get('/api/products/:id', async (req, res) => {
     try {
-        const newTodo = new Todo({
-            task: req.body.task
+        const product = await Product.findById(req.params.id);
+        if (!product) {
+            return res.status(404).json({ message: 'Product not found' });
+        }
+        res.json(product);
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
+
+// Add new product
+app.post('/api/products', async (req, res) => {
+    try {
+        const { name, description, price, imageUrl, category, stock } = req.body;
+        const newProduct = new Product({
+            name,
+            description,
+            price,
+            imageUrl,
+            category,
+            stock
         });
-        const savedTodo = await newTodo.save();
-        res.status(201).json(savedTodo);
+        const savedProduct = await newProduct.save();
+        res.status(201).json(savedProduct);
     } catch (err) {
         res.status(400).json({ message: err.message });
     }
 });
 
-// Toggle todo status (done/not done)
-app.put('/edit/:id', async (req, res) => {
+// Update product
+app.put('/api/products/:id', async (req, res) => {
     try {
-        const todo = await Todo.findById(req.params.id);
-        todo.done = !todo.done;
-        const updatedTodo = await todo.save();
-        res.json(updatedTodo);
-    } catch (err) {
-        res.status(400).json({ message: err.message });
-    }
-});
-
-// Update todo task
-app.put('/update/:id', async (req, res) => {
-    try {
-        const updatedTodo = await Todo.findByIdAndUpdate(
-            req.params.id, 
-            { task: req.body.task },
+        const { name, description, price, imageUrl, category, stock } = req.body;
+        const updatedProduct = await Product.findByIdAndUpdate(
+            req.params.id,
+            { name, description, price, imageUrl, category, stock },
             { new: true }
         );
-        res.json(updatedTodo);
+        if (!updatedProduct) {
+            return res.status(404).json({ message: 'Product not found' });
+        }
+        res.json(updatedProduct);
     } catch (err) {
         res.status(400).json({ message: err.message });
     }
 });
 
-// Delete todo
-app.delete('/delete/:id', async (req, res) => {
+// Delete product
+app.delete('/api/products/:id', async (req, res) => {
     try {
-        const deletedTodo = await Todo.findByIdAndDelete(req.params.id);
-        res.json(deletedTodo);
+        const deletedProduct = await Product.findByIdAndDelete(req.params.id);
+        if (!deletedProduct) {
+            return res.status(404).json({ message: 'Product not found' });
+        }
+        res.json(deletedProduct);
     } catch (err) {
-        res.status(5001).json({ message: err.message });
+        res.status(500).json({ message: err.message });
+    }
+});
+
+// CART ROUTES
+// Get user cart
+app.get('/api/cart/:userId', async (req, res) => {
+    try {
+        let cart = await Cart.findOne({ userId: req.params.userId }).populate('items.productId');
+        if (!cart) {
+            cart = new Cart({ userId: req.params.userId, items: [] });
+            await cart.save();
+        }
+        res.json(cart);
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
+
+// Add item to cart
+app.post('/api/cart', async (req, res) => {
+    try {
+        const { userId, productId, quantity } = req.body;
+        let cart = await Cart.findOne({ userId });
+        
+        if (!cart) {
+            cart = new Cart({ userId, items: [] });
+        }
+        
+        const itemIndex = cart.items.findIndex(item => item.productId.toString() === productId);
+        
+        if (itemIndex > -1) {
+            cart.items[itemIndex].quantity += quantity;
+        } else {
+            cart.items.push({ productId, quantity });
+        }
+        
+        const updatedCart = await cart.save();
+        const populatedCart = await Cart.findById(updatedCart._id).populate('items.productId');
+        res.status(201).json(populatedCart);
+    } catch (err) {
+        res.status(400).json({ message: err.message });
+    }
+});
+
+// Update cart item quantity
+app.put('/api/cart/:userId/:productId', async (req, res) => {
+    try {
+        const { quantity } = req.body;
+        const cart = await Cart.findOne({ userId: req.params.userId });
+        
+        if (!cart) {
+            return res.status(404).json({ message: 'Cart not found' });
+        }
+        
+        const itemIndex = cart.items.findIndex(item => item.productId.toString() === req.params.productId);
+        
+        if (itemIndex === -1) {
+            return res.status(404).json({ message: 'Item not found in cart' });
+        }
+        
+        cart.items[itemIndex].quantity = quantity;
+        
+        const updatedCart = await cart.save();
+        const populatedCart = await Cart.findById(updatedCart._id).populate('items.productId');
+        res.json(populatedCart);
+    } catch (err) {
+        res.status(400).json({ message: err.message });
+    }
+});
+
+// Remove item from cart
+app.delete('/api/cart/:userId/:productId', async (req, res) => {
+    try {
+        const cart = await Cart.findOne({ userId: req.params.userId });
+        
+        if (!cart) {
+            return res.status(404).json({ message: 'Cart not found' });
+        }
+        
+        cart.items = cart.items.filter(item => item.productId.toString() !== req.params.productId);
+        
+        const updatedCart = await cart.save();
+        const populatedCart = await Cart.findById(updatedCart._id).populate('items.productId');
+        res.json(populatedCart);
+    } catch (err) {
+        res.status(500).json({ message: err.message });
     }
 });
 

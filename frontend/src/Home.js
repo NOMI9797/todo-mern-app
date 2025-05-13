@@ -1,138 +1,156 @@
 import React, { useEffect, useState } from 'react';
-import Create from './Create';
 import './App.css';
 import axios from 'axios';
-import { BsCircleFill, BsFillCheckCircleFill, BsFillTrashFill, BsPencil, BsSave } from 'react-icons/bs';
+import Product from './components/Product';
+import Cart from './components/Cart';
+import Header from './components/Header';
 
 // Use environment variable or default to localhost for development
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:50010';
 
+// Temporary user ID - In a real app this would come from authentication
+const TEMP_USER_ID = 'user123';
+
 const Home = () => {
-    const [todos, setTodos] = useState([]);
-    const [updatetask, setUpdatetask] = useState('');
-    const [taskid, setTaskid] = useState('');
-
+    const [products, setProducts] = useState([]);
+    const [cart, setCart] = useState({ items: [] });
+    const [showCart, setShowCart] = useState(false);
+    const [loading, setLoading] = useState(true);
+    
+    // Get all products and user's cart on load
     useEffect(() => {
-        axios.get(`${API_URL}/get`)
-            .then(result => setTodos(result.data))
-            .catch(err => console.log(err));
+        const fetchData = async () => {
+            try {
+                setLoading(true);
+                const [productsRes, cartRes] = await Promise.all([
+                    axios.get(`${API_URL}/api/products`),
+                    axios.get(`${API_URL}/api/cart/${TEMP_USER_ID}`)
+                ]);
+                setProducts(productsRes.data);
+                setCart(cartRes.data);
+            } catch (err) {
+                console.error('Error fetching data:', err);
+            } finally {
+                setLoading(false);
+            }
+        };
+        
+        fetchData();
     }, []);
-
-    const edit = (id) => {
-        axios.put(`${API_URL}/edit/${id}`)
-            .then(result => {
-                console.log(result.data);
-                const updatedTodos = todos.map(todo => {
-                    if (todo._id === id) {
-                        return { ...todo, done: !todo.done };
-                    }
-                    return todo;
-                });
-                setTodos(updatedTodos);
-            })
-            .catch(err => console.log(err));
-    };
-
-    const Update = (id, updatedTask) => {
-        axios.put(`${API_URL}/update/${id}`, { task: updatedTask })
-            .then(result => {
-                console.log(result.data);
-                const updatedTodos = todos.map(todo => {
-                    if (todo._id === id) {
-                        return { ...todo, task: updatedTask };
-                    }
-                    return todo;
-                });
-                setTodos(updatedTodos);
-                setTaskid('');
-                setUpdatetask('');
-                window.location.reload();
-            })
-            .catch(err => console.log(err));
-    };
-
-    const Hdelete = (id) => {
-        // Add confirmation dialog
-        if (window.confirm('Are you sure you want to delete this task?')) {
-            axios.delete(`${API_URL}/delete/${id}`)
-                .then(result => {
-                    console.log(result.data);
-                    const updatedTodos = todos.filter(todo => todo._id !== id);
-                    setTodos(updatedTodos);
-                })
-                .catch(err => console.log(err));
+    
+    // Add product to cart
+    const addToCart = async (productId) => {
+        try {
+            const response = await axios.post(`${API_URL}/api/cart`, {
+                userId: TEMP_USER_ID,
+                productId,
+                quantity: 1
+            });
+            setCart(response.data);
+        } catch (err) {
+            console.error('Error adding to cart:', err);
         }
     };
-
-    // Format timestamp to human-readable format
-    const formatTimeAgo = (timestamp) => {
-        if (!timestamp) return '';
-        
-        const now = new Date();
-        const created = new Date(timestamp);
-        const diffInSeconds = Math.floor((now - created) / 1000);
-        
-        if (diffInSeconds < 60) return `${diffInSeconds} seconds ago`;
-        if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)} minutes ago`;
-        if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)} hours ago`;
-        return `${Math.floor(diffInSeconds / 86400)} days ago`;
+    
+    // Update item quantity in cart
+    const updateQuantity = async (productId, quantity) => {
+        try {
+            const response = await axios.put(`${API_URL}/api/cart/${TEMP_USER_ID}/${productId}`, {
+                quantity
+            });
+            setCart(response.data);
+        } catch (err) {
+            console.error('Error updating cart:', err);
+        }
     };
+    
+    // Remove item from cart
+    const removeItem = async (productId) => {
+        try {
+            const response = await axios.delete(`${API_URL}/api/cart/${TEMP_USER_ID}/${productId}`);
+            setCart(response.data);
+        } catch (err) {
+            console.error('Error removing from cart:', err);
+        }
+    };
+    
+    // Toggle cart visibility
+    const toggleCart = () => {
+        setShowCart(!showCart);
+    };
+    
+    // Count total items in cart
+    const getCartItemsCount = () => {
+        return cart.items.reduce((total, item) => total + item.quantity, 0);
+    };
+    
+    // Filter products by category
+    const [selectedCategory, setSelectedCategory] = useState('All');
+    
+    // Get unique categories from products
+    const categories = ['All', ...new Set(products.map(product => product.category))];
+    
+    // Filter products based on selected category
+    const filteredProducts = selectedCategory === 'All' 
+        ? products 
+        : products.filter(product => product.category === selectedCategory);
+
+    if (loading) {
+        return <div className="loading">Loading products...</div>;
+    }
 
     return (
-        <main>
-            <Create />
-            {
-                todos.length === 0 ? <div className='task'>No tasks found</div> :
-                    todos.map((todo) => (
-                        <div className='task' key={todo._id}>
-                            <div className='checkbox'>
-                                {todo.done ? <BsFillCheckCircleFill className='icon' /> :
-                                    <BsCircleFill className='icon' onClick={() => edit(todo._id)} />}
-                                {taskid === todo._id ? (
-                                    <div className="editing-container">
-                                        <input 
-                                            type='text' 
-                                            value={updatetask} 
-                                            onChange={e => setUpdatetask(e.target.value)} 
-                                            className="edit-input"
-                                        />
-                                    </div>
-                                ) : (
-                                    <div className="task-content">
-                                        <p className={todo.done ? 'through' : 'normal'}>{todo.task}</p>
-                                        <span className="timestamp">{formatTimeAgo(todo.createdAt)}</span>
-                                    </div>
-                                )}
-                            </div>
-                            <div>
-                                <span>
-                                    {taskid === todo._id ? (
-                                        <BsSave 
-                                            className='icon save-icon' 
-                                            onClick={() => Update(todo._id, updatetask)}
-                                            title="Save" 
-                                        />
-                                    ) : (
-                                        <BsPencil 
-                                            className='icon edit-icon' 
-                                            onClick={() => {
-                                                setTaskid(todo._id);
-                                                setUpdatetask(todo.task);
-                                            }}
-                                            title="Edit"
-                                        />
-                                    )}
-                                    <BsFillTrashFill 
-                                        className='icon delete-icon' 
-                                        onClick={() => Hdelete(todo._id)}
-                                        title="Delete" 
-                                    />
-                                </span>
-                            </div>
+        <div className="shop-container">
+            <Header 
+                cartItemsCount={getCartItemsCount()} 
+                toggleCart={toggleCart} 
+            />
+            
+            <main className="main-content">
+                <div className="sidebar">
+                    <h3>Categories</h3>
+                    <ul className="category-list">
+                        {categories.map(category => (
+                            <li 
+                                key={category}
+                                className={selectedCategory === category ? 'active' : ''}
+                                onClick={() => setSelectedCategory(category)}
+                            >
+                                {category}
+                            </li>
+                        ))}
+                    </ul>
+                </div>
+                
+                <div className="products-grid">
+                    <h2>{selectedCategory} Products</h2>
+                    {filteredProducts.length === 0 ? (
+                        <div className="no-products">No products found</div>
+                    ) : (
+                        <div className="products-container">
+                            {filteredProducts.map(product => (
+                                <Product 
+                                    key={product._id} 
+                                    product={product} 
+                                    addToCart={addToCart} 
+                                />
+                            ))}
                         </div>
-                    ))
-            }
-        </main>
+                    )}
+                </div>
+                
+                {showCart && (
+                    <div className="cart-sidebar">
+                        <div className="cart-close" onClick={toggleCart}>×</div>
+                        <Cart 
+                            cart={cart} 
+                            updateQuantity={updateQuantity} 
+                            removeItem={removeItem} 
+                        />
+                    </div>
+                )}
+            </main>
+        </div>
     );
 };
 
