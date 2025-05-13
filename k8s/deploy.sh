@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Set your Docker Hub username
-DOCKER_USERNAME="your-docker-username"
+DOCKER_USERNAME="nomi737"
 
 # Update image names in the deployment files
 sed -i '' "s/\${DOCKER_USERNAME}/$DOCKER_USERNAME/g" k8s/backend-deployment.yaml

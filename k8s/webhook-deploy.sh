@@ -6,18 +6,22 @@
 # Set your Docker Hub username
 DOCKER_USERNAME="nomi737"
 
+# Get the directory where the script is located
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+
 # Pull the latest images
 docker pull $DOCKER_USERNAME/todo-backend:latest
 docker pull $DOCKER_USERNAME/todo-frontend:latest
 
 # Create a temporary file with the Docker username replaced
-sed "s/\${DOCKER_USERNAME}/$DOCKER_USERNAME/g" k8s/all-in-one-deployment.yaml > k8s/temp-deployment.yaml
+sed "s/\${DOCKER_USERNAME}/$DOCKER_USERNAME/g" "$SCRIPT_DIR/all-in-one-deployment.yaml" > "$SCRIPT_DIR/temp-deployment.yaml"
 
 # Apply the Kubernetes manifests
-kubectl apply -f k8s/temp-deployment.yaml
+kubectl apply -f "$SCRIPT_DIR/temp-deployment.yaml"
 
 # Remove the temporary file
-rm k8s/temp-deployment.yaml
+rm "$SCRIPT_DIR/temp-deployment.yaml"
 
 # Restart the deployments to pick up new images
 kubectl rollout restart deployment/backend
@@ -32,4 +36,4 @@ kubectl rollout status deployment/frontend
 # Get the URL for the frontend service
 minikube service frontend --url
 
-echo "Deployment completed successfully!" 
+echo "Deployment completed successfully!"
